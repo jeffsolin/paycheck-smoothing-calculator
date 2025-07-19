@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paycheck Smoothing Calculator</title>
+  <meta name="description" content="Understand how paycheck smoothing affects your hourly rate and take-home pay with this visual calculator.">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    }
+
+    .animated-bar {
+      transition: width 0.8s ease-in-out;
+    }
+
+    .pulse-glow {
+      animation: pulse-glow 2s infinite;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.5); }
+      50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.8); }
+    }
+
+    .comparison-card {
+      transition: transform 0.2s ease;
+    }
+
+    .comparison-card:hover {
+      transform: translateY(-2px);
+    }
+  </style>
+</head>
+
+<body>
+<div id="root"></div>
+<script type="text/babel">
+  const { useState, useEffect } = React;
+
+  const PaycheckSmoothingCalculator = () => {
+    // State variables
+    const [annualSalary, setAnnualSalary] = useState(55000);
+    const [workDays, setWorkDays] = useState(208);
+    const [hoursPerDay, setHoursPerDay] = useState(6.25);
+    const [smoothingDays, setSmoothingDays] = useState(216);
+    const [showExplanation, setShowExplanation] = useState(true);
+    const [animateComparison, setAnimateComparison] = useState(false);
+    const [showTipModal, setShowTipModal] = useState(false);
+    const [tipMethod, setTipMethod] = useState('venmo');
+    const [customTipAmount, setCustomTipAmount] = useState(0);
+    const [selectedAmount, setSelectedAmount] = useState(0);
+    const [tipAmount, setTipAmount] = useState(0);
+
+    // Calculated values
+    const actualHourlyRate = annualSalary / workDays / hoursPerDay;
+    const smoothedHourlyRate = annualSalary / smoothingDays / hoursPerDay;
+    const hourlyDifference = actualHourlyRate - smoothedHourlyRate;
+    const percentageDifference = (hourlyDifference / actualHourlyRate) * 100;
+    
+    const actualBiweeklyPay = (actualHourlyRate * hoursPerDay * 10); // 10 work days in 2 weeks
+    const smoothedBiweeklyPay = (smoothedHourlyRate * hoursPerDay * 10);
+    const biweeklyDifference = actualBiweeklyPay - smoothedBiweeklyPay;
+
+    const unpaidDays = smoothingDays - workDays;
+    const totalUnpaidHours = unpaidDays * hoursPerDay;
+    const totalUnpaidAmount = totalUnpaidHours * smoothedHourlyRate;
+
+    // Helper functions
+    const openTipModal = (amount) => {
+      setTipAmount(amount);
+      setShowTipModal(true);
+    };
+
+    const handleTip = (method) => {
+      const amount = customTipAmount > 0 ? customTipAmount : selectedAmount;
+      if (amount > 0) {
+        setTipAmount(amount);
+        setTipMethod(method);
+        setShowTipModal(true);
+      }
+    };
+
+    // Animation trigger
+    useEffect(() => {
+      setAnimateComparison(true);
+      const timer = setTimeout(() => setAnimateComparison(false), 1000);
+      return () => clearTimeout(timer);
+    }, [annualSalary, workDays, hoursPerDay, smoothingDays]);
+
+    // Format currency
+    const formatCurrency = (amount) => {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    };
+
+    // Format number with 2 decimal places
+    const formatNumber = (number) => {
+      return number.toFixed(2);
+    };
+
+    // Chart for visual comparison
+    const [chartInstance, setChartInstance] = useState(null);
+
+    useEffect(() => {
+      const ctx = document.getElementById('comparisonChart');
+      if (!ctx) return;
+
+      if (chartInstance) {
+        chartInstance.destroy();
+      }
+
+      const newChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Actual Hourly Rate', 'Smoothed Hourly Rate'],
+          datasets: [{
+            label: 'Hourly Rate ($)',
+            data: [actualHourlyRate, smoothedHourlyRate],
+            backgroundColor: [
+              'rgba(34, 197, 94, 0.8)',
+              'rgba(59, 130, 246, 0.8)'
+            ],
+            borderColor: [
+              'rgba(34, 197, 94, 1)',
+              'rgba(59, 130, 246, 1)'
+            ],
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            },
+            title: {
+              display: true,
+              text: 'Hourly Rate Comparison',
+              font: {
+                size: 16,
+                weight: 'bold'
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return `${formatCurrency(context.parsed.y)} per hour`;
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return formatCurrency(value);
+                }
+              }
+            }
+          }
+        }
+      });
+
+      setChartInstance(newChart);
+
+      return () => {
+        if (newChart) {
+          newChart.destroy();
+        }
+      };
+    }, [actualHourlyRate, smoothedHourlyRate]);
+
+    return (
+      <div className="flex flex-col items-center p-4 bg-gray-50 rounded-lg shadow-md">
+        <h1 className="text-2xl font-bold mb-4 text-blue-700">Paycheck Smoothing Calculator</h1>
+        
+        {showExplanation && (
+          <div className="bg-blue-50 p-4 rounded-lg mb-4 text-sm w-full max-w-4xl">
+            <h2 className="font-bold mb-2">What is Paycheck Smoothing?</h2>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Chicago Public Schools uses "paycheck smoothing" to spread your annual salary across more pay periods</li>
+              <li>Instead of getting paid only for days worked, you receive smaller consistent payments that include unpaid vacation days. This is only for unpaid vacation days during the school year and does not include the summer.</li>
+              <li>This is NOT a deferred pay option but has some similarities.</li>
+              <li>For example: Teachers typically work 208 days but get paid over 216 days (including 8 unpaid vacation days)</li>
+              <li>This reduces your effective hourly rate but provides consistent income during Thanksgiving and Winter breaks.</li>
+              <li>The district holds back part of your pay during work periods and pays you during vacation periods</li>
+              <li>Understanding this helps you see the real value of your work time vs. your take-home pay schedule</li>
+            </ul>
+            <button
+              className="mt-3 px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-md text-xs"
+              onClick={() => setShowExplanation(false)}
+            >
+              Hide Explanation
+            </button>
+          </div>
+        )}
+        
+        {!showExplanation && (
+          <button
+            className="mb-4 px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-md text-xs"
+            onClick={() => setShowExplanation(true)}
+          >
+            Show Explanation
+          </button>
+        )}
+
+        <div className="w-full max-w-4xl bg-blue-50 p-4 rounded-lg mb-4 text-sm">
+          <h2 className="font-bold mb-2 text-blue-700">Support This Tool</h2>
+          <p className="mb-3">
+            If you found this calculator helpful for understanding your paycheck smoothing, please consider supporting its continued development and maintenance.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+            <div className="flex gap-2">
+              <button
+                className={`px-3 py-2 ${selectedAmount === 3 ? 'bg-blue-200 border-blue-500 border-2' : 'bg-gray-100 hover:bg-gray-200'} text-gray-800 rounded text-sm flex-1 transition duration-150`}
+                onClick={() => {
+                  setSelectedAmount(3);
+                  setCustomTipAmount(0);
+                }}
+              >
+                $3
+              </button>
+              <button
+                className={`px-3 py-2 ${selectedAmount === 5 ? 'bg-blue-200 border-blue-500 border-2' : 'bg-gray-100 hover:bg-gray-200'} text-gray-800 rounded text-sm flex-1 transition duration-150`}
+                onClick={() => {
+                  setSelectedAmount(5);
+                  setCustomTipAmount(0);
+                }}
+              >
+                $5
+              </button>
+              <button
+                className={`px-3 py-2 ${selectedAmount === 10 ? 'bg-blue-200 border-blue-500 border-2' : 'bg-gray-100 hover:bg-gray-200'} text-gray-800 rounded text-sm flex-1 transition duration-150`}
+                onClick={() => {
+                  setSelectedAmount(10);
+                  setCustomTipAmount(0);
+                }}
+              >
+                $10
+              </button>
+            </div>
+         
+            <div className="flex items-center">
+              <input
+                type="number"
+                id="customTipAmount"
+                placeholder="Custom"
+                className="p-2 border border-gray-300 rounded w-full"
+                min="1"
+                value={customTipAmount > 0 ? customTipAmount : ''}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  setCustomTipAmount(value);
+                  if (value > 0) {
+                    setSelectedAmount(0);
+                  }
+                }}
+              />
+            </div>
+         
+            <div className="flex gap-2 col-span-2">
+              <button
+                className="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm flex-1 transition duration-150 flex items-center justify-center"
+                onClick={() => handleTip('venmo')}
+                disabled={selectedAmount === 0 && customTipAmount === 0}
+              >
+                <span>Venmo</span>
+              </button>
+              <button
+                className="px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded text-sm flex-1 transition duration-150 flex items-center justify-center"
+                onClick={() => handleTip('zelle')}
+                disabled={selectedAmount === 0 && customTipAmount === 0}
+              >
+                <span>Zelle</span>
+              </button>
+              <button
+                className="px-3 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded text-sm flex-1 transition duration-150 flex items-center justify-center"
+                onClick={() => handleTip('paypal')}
+                disabled={selectedAmount === 0 && customTipAmount === 0}
+              >
+                <span>PayPal</span>
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 italic">
+            Your support helps keep this tool free, updated, and available. Thank you!
+          </p>
+        </div>
+
+        {showTipModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold">Tip with {tipMethod === 'venmo' ? 'Venmo' : tipMethod === 'zelle' ? 'Zelle' : 'PayPal'}</h3>
+                <button
+                  className="text-gray-500 hover:text-gray-700"
+                  onClick={() => setShowTipModal(false)}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            
+              <div className="mb-4">
+                <p className="mb-2">Amount: <span className="font-bold">${tipAmount}</span></p>
+              
+                {tipMethod === 'venmo' && (
+                  <div>
+                    <p className="mb-2">Send to: <span className="font-bold">@solinsystems</span></p>
+                    <p className="mb-4">Open your Venmo app and search for this username to send your tip.</p>
+                    <button
+                      className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded transition duration-150"
+                      onClick={() => window.open(`https://venmo.com/solinsystems?txn=pay&note=${encodeURIComponent('Thanks for the Paycheck Smoothing Calculator!')}&amount=${tipAmount}`, '_blank')}
+                    >
+                      Open Venmo
+                    </button>
+                  </div>
+                )}
+              
+                {tipMethod === 'zelle' && (
+                  <div>
+                    <p className="mb-2">Send to: <span className="font-bold">jeff@solinsystems.com</span></p>
+                    <p className="mb-4">Open your banking app that supports Zelle and send to this email address.</p>
+                    <button
+                      className="w-full px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded transition duration-150"
+                      onClick={() => {
+                        navigator.clipboard.writeText('jeff@solinsystems.com');
+                        alert('Email copied to clipboard!');
+                      }}
+                    >
+                      Copy Email Address
+                    </button>
+                  </div>
+                )}
+              
+                {tipMethod === 'paypal' && (
+                  <div>
+                    <p className="mb-2">Send to: <span className="font-bold">jeff@solinsystems.com</span></p>
+                    <p className="mb-4">Open PayPal and send your tip to this email address.</p>
+                    <button
+                      className="w-full px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded transition duration-150"
+                      onClick={() => window.open(`https://www.paypal.com/paypalme/solinsystems/${tipAmount}`, '_blank')}
+                    >
+                      Open PayPal
+                    </button>
+                  </div>
+                )}
+              </div>
+            
+              <div className="text-center mt-4">
+                <button
+                  className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded transition duration-150"
+                  onClick={() => setShowTipModal(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Input Section */}
+        <div className="w-full max-w-4xl bg-white p-4 rounded-lg shadow-sm mb-4">
+          <h2 className="text-lg font-semibold mb-3">Your Employment Details</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="text-sm text-gray-600 block mb-1">Annual Salary</label>
+              <div className="flex">
+                <span className="bg-gray-100 flex items-center px-3 border border-gray-300 rounded-l">$</span>
+                <input
+                  type="number"
+                  value={annualSalary}
+                  onChange={(e) => setAnnualSalary(Number(e.target.value))}
+                  className="flex-grow p-2 border border-gray-300 rounded-r focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <span className="text-xs text-gray-500 italic">Your total annual salary</span>
+            </div>
+            
+            <div>
+              <label className="text-sm text-gray-600 block mb-1">Work Days per Year</label>
+              <input
+                type="number"
+                value={workDays}
+                onChange={(e) => setWorkDays(Number(e.target.value))}
+                className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <span className="text-xs text-gray-500 italic">Actual days you work (typical: 180-210)</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm text-gray-600 block mb-1">Hours per Work Day</label>
+              <input
+                type="number"
+                step="0.25"
+                value={hoursPerDay}
+                onChange={(e) => setHoursPerDay(Number(e.target.value))}
+                className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <span className="text-xs text-gray-500 italic">Hours you're paid for each day (typical: 6.25-8)</span>
+            </div>
+            
+            <div>
+              <label className="text-sm text-gray-600 block mb-1">Smoothing Days (Total Pay Periods)</label>
+              <input
+                type="number"
+                value={smoothingDays}
+                onChange={(e) => setSmoothingDays(Number(e.target.value))}
+                className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <span className="text-xs text-gray-500 italic">Days salary is spread across (work days + unpaid days)</span>
+            </div>
+          </div>
+
+          {/* Quick Presets */}
+          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+            <h3 className="text-sm font-semibold mb-2">Quick Preset:</h3>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded text-xs"
+                onClick={() => {
+                  setWorkDays(208);
+                  setHoursPerDay(6.25);
+                  setSmoothingDays(216);
+                }}
+              >
+                CPS Teacher (208 days, 6.25 hrs, 216 smooth)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Comparison Section */}
+        <div className="w-full max-w-4xl bg-white p-4 rounded-lg shadow-sm mb-4">
+          <h2 className="text-lg font-semibold mb-4">Hourly Rate Comparison</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* Actual Rate Card */}
+            <div className={`comparison-card bg-green-50 p-4 rounded-lg border-2 border-green-200 ${animateComparison ? 'pulse-glow' : ''}`}>
+              <h3 className="text-lg font-semibold text-green-700 mb-2">Actual Hourly Rate</h3>
+              <div className="text-3xl font-bold text-green-800 mb-2">
+                {formatCurrency(actualHourlyRate)}
+              </div>
+              <div className="text-sm text-green-600 mb-3">
+                Based on {workDays} work days × {hoursPerDay} hours
+              </div>
+              <div className="bg-green-100 p-2 rounded text-xs">
+                <strong>This is what you actually earn per hour worked</strong>
+              </div>
+            </div>
+
+            {/* Smoothed Rate Card */}
+            <div className={`comparison-card bg-blue-50 p-4 rounded-lg border-2 border-blue-200 ${animateComparison ? 'pulse-glow' : ''}`}>
+              <h3 className="text-lg font-semibold text-blue-700 mb-2">Smoothed Hourly Rate</h3>
+              <div className="text-3xl font-bold text-blue-800 mb-2">
+                {formatCurrency(smoothedHourlyRate)}
+              </div>
+              <div className="text-sm text-blue-600 mb-3">
+                Based on {smoothingDays} pay days × {hoursPerDay} hours
+              </div>
+              <div className="bg-blue-100 p-2 rounded text-xs">
+                <strong>This is your effective hourly rate with smoothing</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Difference Highlight */}
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-yellow-800">The Difference</h3>
+                <p className="text-sm text-yellow-700">
+                  You effectively earn <strong>{formatCurrency(hourlyDifference)}</strong> less per hour 
+                  (<strong>{formatNumber(percentageDifference)}%</strong> reduction) due to paycheck smoothing
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-2xl font-bold text-yellow-800">
+                  -{formatCurrency(hourlyDifference)}
+                </div>
+                <div className="text-sm text-yellow-600">per hour</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Visual Comparison Bar */}
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold mb-2">Visual Rate Comparison</h3>
+            <div className="relative">
+              <div className="h-12 bg-gray-200 rounded-lg overflow-hidden">
+                <div 
+                  className="animated-bar h-full bg-green-500 flex items-center justify-center text-white font-semibold"
+                  style={{ width: '100%' }}
+                >
+                  Actual: {formatCurrency(actualHourlyRate)}
+                </div>
+              </div>
+              <div className="h-12 bg-gray-200 rounded-lg overflow-hidden mt-2">
+                <div 
+                  className="animated-bar h-full bg-blue-500 flex items-center justify-center text-white font-semibold"
+                  style={{ width: `${(smoothedHourlyRate / actualHourlyRate) * 100}%` }}
+                >
+                  Smoothed: {formatCurrency(smoothedHourlyRate)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Chart */}
+          <div className="h-64">
+            <canvas id="comparisonChart"></canvas>
+          </div>
+        </div>
+
+        {/* Detailed Breakdown */}
+        <div className="w-full max-w-4xl bg-white p-4 rounded-lg shadow-sm mb-4">
+          <h2 className="text-lg font-semibold mb-4">Detailed Breakdown</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Pay Period Comparison */}
+            <div>
+              <h3 className="text-md font-semibold mb-3 text-gray-700">Bi-Weekly Pay Comparison</h3>
+              <div className="space-y-3">
+                <div className="bg-green-50 p-3 rounded-lg">
+                  <div className="text-sm text-gray-600">Without Smoothing (work periods only)</div>
+                  <div className="text-xl font-bold text-green-700">{formatCurrency(actualBiweeklyPay)}</div>
+                  <div className="text-xs text-gray-500">Based on {hoursPerDay * 10} hours at {formatCurrency(actualHourlyRate)}/hr</div>
+                </div>
+                
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <div className="text-sm text-gray-600">With Smoothing (consistent pay)</div>
+                  <div className="text-xl font-bold text-blue-700">{formatCurrency(smoothedBiweeklyPay)}</div>
+                  <div className="text-xs text-gray-500">Based on {hoursPerDay * 10} hours at {formatCurrency(smoothedHourlyRate)}/hr</div>
+                </div>
+                
+                <div className="bg-red-50 p-3 rounded-lg border border-red-200">
+                  <div className="text-sm text-gray-600">Difference per pay period</div>
+                  <div className="text-xl font-bold text-red-700">-{formatCurrency(biweeklyDifference)}</div>
+                  <div className="text-xs text-gray-500">Less money during work periods</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Unpaid Days Analysis */}
+            <div>
+              <h3 className="text-md font-semibold mb-3 text-gray-700">Unpaid Days Analysis</h3>
+              <div className="space-y-3">
+                <div className="bg-orange-50 p-3 rounded-lg">
+                  <div className="text-sm text-gray-600">Unpaid Days</div>
+                  <div className="text-xl font-bold text-orange-700">{unpaidDays} days</div>
+                  <div className="text-xs text-gray-500">{smoothingDays} total pay days - {workDays} work days</div>
+                </div>
+                
+                <div className="bg-orange-50 p-3 rounded-lg">
+                  <div className="text-sm text-gray-600">Unpaid Hours</div>
+                  <div className="text-xl font-bold text-orange-700">{formatNumber(totalUnpaidHours)} hours</div>
+                  <div className="text-xs text-gray-500">{unpaidDays} days × {hoursPerDay} hours/day</div>
+                </div>
+                
+                <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                  <div className="text-sm text-gray-600">Value of unpaid time (at smoothed rate)</div>
+                  <div className="text-xl font-bold text-purple-700">{formatCurrency(totalUnpaidAmount)}</div>
+                  <div className="text-xs text-gray-500">Amount district pays you during vacation</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Summary */}
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h3 className="text-md font-semibold mb-2 text-gray-700">Summary</h3>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              With paycheck smoothing, you receive <strong>{formatCurrency(smoothedBiweeklyPay)}</strong> consistently 
+              throughout the year instead of <strong>{formatCurrency(actualBiweeklyPay)}</strong> during work periods 
+              and <strong>$0</strong> during {unpaidDays} days of vacation. The district essentially holds back 
+              <strong> {formatCurrency(biweeklyDifference)}</strong> from each paycheck during work periods to pay 
+              you <strong>{formatCurrency(totalUnpaidAmount)}</strong> total during vacation periods.
+            </p>
+          </div>
+        </div>
+
+        {/* Understanding Section */}
+        <div className="w-full max-w-4xl bg-white p-4 rounded-lg shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Understanding Your Results</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-green-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-green-700 mb-2">Pros of Smoothing</h3>
+              <ul className="text-sm text-green-600 space-y-1">
+                <li>• Consistent income year-round</li>
+                <li>• Easier budgeting and bill paying</li>
+                <li>• No need to save for vacation periods</li>
+                <li>• Automatic forced savings system</li>
+              </ul>
+            </div>
+            
+            <div className="bg-red-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-red-700 mb-2">Cons of Smoothing</h3>
+              <ul className="text-sm text-red-600 space-y-1">
+                <li>• Lower effective hourly rate</li>
+                <li>• No interest earned on held funds</li>
+                <li>• Less flexibility with your money</li>
+                <li>• District benefits from cash flow</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<PaycheckSmoothingCalculator />);
+</script>
+</body>
+</html>
